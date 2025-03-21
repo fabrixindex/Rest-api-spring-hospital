@@ -3,6 +3,7 @@ package com.healthflow.service;
 import com.healthflow.models.Medication;
 import com.healthflow.repository.MedicationRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -30,5 +31,27 @@ public class MedicationService {
 
     public void deleteMedication(Long id) {
         medicationRepository.deleteById(id);
+    }
+
+    @Transactional
+    public void reduceStock(Long id, int amount) {
+        Medication medication = medicationRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Medication not found"));
+
+        if (medication.getStock() < amount) {
+            throw new IllegalArgumentException("Not enough stock for medication: " + medication.getName());
+        }
+
+        medication.setStock(medication.getStock() - amount);
+        medicationRepository.save(medication);
+    }
+
+    @Transactional
+    public void increaseStock(Long id, int amount) {
+        Medication medication = medicationRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Medication not found"));
+
+        medication.setStock(medication.getStock() + amount);
+        medicationRepository.save(medication);
     }
 }

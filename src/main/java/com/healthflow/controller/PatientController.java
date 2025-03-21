@@ -20,10 +20,15 @@ public class PatientController {
     }
 
     @GetMapping
-    public ResponseEntity<List<PatientDTO>> getAllPatients() {
+    public ResponseEntity<?> getAllPatients() {
         List<PatientDTO> patients = patientRepository.findAll().stream()
                 .map(PatientDTO::fromEntity)
                 .toList();
+        
+        if (patients.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NO_CONTENT).body("No patients found.");
+        }
+
         return ResponseEntity.ok(patients);
     }
 
@@ -36,11 +41,13 @@ public class PatientController {
     }
 
     @PostMapping
-    public ResponseEntity<PatientDTO> createPatient(@RequestBody PatientDTO patientDTO) {
+    public ResponseEntity<String> createPatient(@RequestBody PatientDTO patientDTO) {
         Patient patient = patientDTO.toEntity();
         Patient savedPatient = patientRepository.save(patient);
-        return ResponseEntity.status(HttpStatus.CREATED).body(PatientDTO.fromEntity(savedPatient));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body("Patient created successfully with ID: " + savedPatient.getId());
     }
+
 
     @PutMapping("/{id}")
     public ResponseEntity<PatientDTO> updatePatient(@PathVariable Long id, @RequestBody PatientDTO patientDTO) {
@@ -50,15 +57,16 @@ public class PatientController {
             patient.setDateOfBirth(patientDTO.dateOfBirth());
             Patient updatedPatient = patientRepository.save(patient);
             return ResponseEntity.ok(PatientDTO.fromEntity(updatedPatient));
-        }).orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).build());
+        }).orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).build()); 
     }
+    
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deletePatient(@PathVariable Long id) {
-        if (patientRepository.existsById(id)) {
-            patientRepository.deleteById(id);
-            return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
-        }
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+    public ResponseEntity<String> deletePatient(@PathVariable Long id) {
+        return patientRepository.findById(id).map(patient -> {
+            patientRepository.delete(patient);
+            return ResponseEntity.ok("Patient successfully deleted.");
+        }).orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).body("Patient not found."));
     }
+    
 }
