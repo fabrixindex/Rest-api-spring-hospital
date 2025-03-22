@@ -23,7 +23,7 @@ public class Patient {
     private String phone;
 
     @ManyToOne
-    @JoinColumn(name = "hospital_room_id")
+    @JoinColumn(name = "hospital_room_id", nullable = true) 
     private HospitalRoom hospitalRoom;
 
     @OneToMany(mappedBy = "patient", cascade = CascadeType.ALL, orphanRemoval = true)

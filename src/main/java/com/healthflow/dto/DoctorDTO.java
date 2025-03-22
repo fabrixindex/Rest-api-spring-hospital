@@ -10,7 +10,6 @@ import lombok.*;
 @ToString
 public class DoctorDTO {
     
-    private Long id;
     private String firstName;
     private String lastName;
     private String specialty;
@@ -19,7 +18,6 @@ public class DoctorDTO {
 
     public static DoctorDTO fromEntity(Doctor doctor) {
         return new DoctorDTO(
-            doctor.getId(),
             doctor.getFirstName(),
             doctor.getLastName(),
             doctor.getSpecialty(),
@@ -30,7 +28,6 @@ public class DoctorDTO {
 
     public Doctor toEntity() {
         Doctor doctor = new Doctor();
-        doctor.setId(this.id);
         doctor.setFirstName(this.firstName);
         doctor.setLastName(this.lastName);
         doctor.setSpecialty(this.specialty);
