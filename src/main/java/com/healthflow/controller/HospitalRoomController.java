@@ -7,7 +7,10 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.persistence.EntityNotFoundException;
 
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -33,26 +36,36 @@ public class HospitalRoomController {
                 .toList();
     }
 
-    @Operation(summary = "Get a hospital room by ID", description = "Retrieve details of a specific hospital room by its ID.")
-    @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "Hospital room found"),
-        @ApiResponse(responseCode = "404", description = "Hospital room not found")
-    })
     @GetMapping("/{id}")
-    public ResponseEntity<HospitalRoomDTO> getHospitalRoomById(@PathVariable Long id) {
-        return hospitalRoomRepository.findById(id)
-                .map(HospitalRoomDTO::fromEntity)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+    public ResponseEntity<?> getHospitalRoomById(@PathVariable Long id) {
+        try {
+            HospitalRoom hospitalRoom = hospitalRoomRepository.findById(id)
+                    .orElseThrow(() -> new EntityNotFoundException("Hospital room with ID " + id + " not found."));
+            return ResponseEntity.ok(HospitalRoomDTO.fromEntity(hospitalRoom));
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("Error: " + e.getMessage());
+        }
     }
 
     @Operation(summary = "Create a new hospital room", description = "Add a new hospital room to the system.")
-    @ApiResponse(responseCode = "200", description = "Hospital room created successfully")
+    @ApiResponses({
+        @ApiResponse(responseCode = "201", description = "Hospital room created successfully"),
+        @ApiResponse(responseCode = "400", description = "Invalid request data")
+    })
     @PostMapping
-    public ResponseEntity<HospitalRoomDTO> createHospitalRoom(@RequestBody HospitalRoomDTO hospitalRoomDTO) {
-        HospitalRoom hospitalRoom = hospitalRoomDTO.toEntity();
-        HospitalRoom savedRoom = hospitalRoomRepository.save(hospitalRoom);
-        return ResponseEntity.ok(HospitalRoomDTO.fromEntity(savedRoom));
+    public ResponseEntity<?> createHospitalRoom(@RequestBody HospitalRoomDTO hospitalRoomDTO) {
+        try {
+            HospitalRoom hospitalRoom = hospitalRoomDTO.toEntity();
+            HospitalRoom savedRoom = hospitalRoomRepository.save(hospitalRoom);
+            return ResponseEntity.status(HttpStatus.CREATED).body(HospitalRoomDTO.fromEntity(savedRoom));
+        } catch (DataIntegrityViolationException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Error: Data integrity violation. Please check your input.");
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Invalid request: " + e.getMessage());
+        }
     }
 
     @Operation(summary = "Update a hospital room", description = "Modify the details of an existing hospital room.")
@@ -78,11 +91,12 @@ public class HospitalRoomController {
         @ApiResponse(responseCode = "404", description = "Hospital room not found")
     })
     @DeleteMapping("/{id}")
-    public ResponseEntity<String> deleteHospitalRoom(@PathVariable Long id) {
+    public ResponseEntity<?> deleteHospitalRoom(@PathVariable Long id) {
         if (hospitalRoomRepository.existsById(id)) {
             hospitalRoomRepository.deleteById(id);
             return ResponseEntity.ok("Hospital room deleted successfully.");
         }
-        return ResponseEntity.notFound().build();
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body("Error: Hospital room with ID " + id + " not found.");
     }
 }

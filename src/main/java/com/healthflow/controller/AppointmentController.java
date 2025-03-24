@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.persistence.EntityNotFoundException;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -53,37 +54,53 @@ public class AppointmentController {
 
     @Operation(summary = "Get appointment by ID", description = "Retrieves an appointment by its ID.")
     @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "Appointment found", 
-                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = AppointmentDTO.class))),
+        @ApiResponse(responseCode = "200", description = "Appointment found",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = AppointmentDTO.class))),
         @ApiResponse(responseCode = "404", description = "Appointment not found")
     })
     @GetMapping("/{id}")
-    public ResponseEntity<AppointmentDTO> getAppointmentById(@PathVariable Long id) {
-        return appointmentRepository.findById(id)
-                .map(appointment -> ResponseEntity.ok(AppointmentDTO.fromEntity(appointment)))
-                .orElse(ResponseEntity.notFound().build());
+    public ResponseEntity<?> getAppointmentById(@PathVariable Long id) {
+        try {
+            Appointment appointment = appointmentRepository.findById(id)
+                    .orElseThrow(() -> new EntityNotFoundException("Appointment with ID " + id + " not found."));
+            
+            return ResponseEntity.ok(AppointmentDTO.fromEntity(appointment));
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("Error: " + e.getMessage());
+        }
     }
-
+    
     @Operation(summary = "Create a new appointment", description = "Registers a new appointment with a doctor and a patient.")
     @ApiResponses({
         @ApiResponse(responseCode = "201", description = "Appointment created successfully", 
                      content = @Content(mediaType = "application/json", schema = @Schema(implementation = AppointmentDTO.class))),
-        @ApiResponse(responseCode = "400", description = "Doctor or Patient not found")
+        @ApiResponse(responseCode = "400", description = "Doctor or Patient not found", content = @Content(mediaType = "application/json"))
     })
     @PostMapping
-    public ResponseEntity<AppointmentDTO> createAppointment(@RequestBody AppointmentDTO appointmentDTO) {
-        Appointment appointment = appointmentDTO.toEntity();
-        
-        appointment.setDoctor(doctorRepository.findById(appointmentDTO.getDoctorId()).orElse(null));
-        appointment.setPatient(patientRepository.findById(appointmentDTO.getPatientId()).orElse(null));
-
-        if (appointment.getDoctor() == null || appointment.getPatient() == null) {
-            return ResponseEntity.badRequest().build();
+    public ResponseEntity<?> createAppointment(@RequestBody AppointmentDTO appointmentDTO) {
+        try {
+            Doctor doctor = doctorRepository.findById(appointmentDTO.getDoctorId())
+                    .orElseThrow(() -> new IllegalArgumentException("Doctor with ID " + appointmentDTO.getDoctorId() + " not found."));
+            
+            Patient patient = patientRepository.findById(appointmentDTO.getPatientId())
+                    .orElseThrow(() -> new IllegalArgumentException("Patient with ID " + appointmentDTO.getPatientId() + " not found."));
+            
+            Appointment appointment = appointmentDTO.toEntity();
+            appointment.setDoctor(doctor);
+            appointment.setPatient(patient);
+    
+            Appointment savedAppointment = appointmentRepository.save(appointment);
+            return ResponseEntity.status(HttpStatus.CREATED).body(AppointmentDTO.fromEntity(savedAppointment));
+    
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Error: " + e.getMessage());
+    
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Error: Could not create appointment. " + e.getMessage());
         }
-
-        Appointment savedAppointment = appointmentRepository.save(appointment);
-        return ResponseEntity.status(HttpStatus.CREATED).body(AppointmentDTO.fromEntity(savedAppointment));
-    }
+    }    
 
     @Operation(summary = "Update an appointment", description = "Updates an existing appointment's details.")
     @ApiResponses({

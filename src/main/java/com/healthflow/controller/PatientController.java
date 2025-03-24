@@ -12,10 +12,10 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.validation.Valid;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.util.List;
 
@@ -33,7 +33,8 @@ public class PatientController {
     @Operation(summary = "Get all patients", description = "Retrieves a list of all registered patients.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "List of patients retrieved successfully", 
-                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = PatientDTO.class)))
+                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = PatientDTO.class))),
+        @ApiResponse(responseCode = "204", description = "No patients found", content = @Content)
     })
     @GetMapping
     public ResponseEntity<List<PatientDTO>> getAllPatients() {
@@ -51,14 +52,14 @@ public class PatientController {
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Patient retrieved successfully", 
                      content = @Content(mediaType = "application/json", schema = @Schema(implementation = PatientDTO.class))),
-        @ApiResponse(responseCode = "404", description = "Patient not found", content = @Content(mediaType = "application/json"))
+        @ApiResponse(responseCode = "404", description = "Patient not found", content = @Content)
     })
     @GetMapping("/{id}")
     public ResponseEntity<?> getPatientById(@PathVariable Long id) {
         try {
             Patient patient = patientService.getPatientById(id);
             return ResponseEntity.ok(PatientDTO.fromEntity(patient));
-        } catch (ResponseStatusException ex) {
+        } catch (EntityNotFoundException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body("Error: Patient with ID " + id + " not found.");
         }
@@ -75,6 +76,9 @@ public class PatientController {
         try {
             Patient patient = patientService.savePatient(patientDTO.toEntity());
             return ResponseEntity.status(HttpStatus.CREATED).body(PatientDTO.fromEntity(patient));
+        } catch (DataIntegrityViolationException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Error: Data integrity violation. Please check your input.");
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body("Invalid request: " + e.getMessage()); 
@@ -85,15 +89,19 @@ public class PatientController {
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Patient updated successfully", 
                      content = @Content(mediaType = "application/json", schema = @Schema(implementation = PatientDTO.class))),
-        @ApiResponse(responseCode = "404", description = "Patient not found", content = @Content(mediaType = "application/json"))
+        @ApiResponse(responseCode = "404", description = "Patient not found", content = @Content)
     })
     @PutMapping("/{id}")
-    public ResponseEntity<PatientDTO> updatePatient(@PathVariable Long id, @Valid @RequestBody PatientDTO patientDTO) {
+    public ResponseEntity<?> updatePatient(@PathVariable Long id, @Valid @RequestBody PatientDTO patientDTO) {
         try {
             Patient updatedPatient = patientService.updatePatient(id, patientDTO.toEntity());
             return ResponseEntity.ok(PatientDTO.fromEntity(updatedPatient));
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("Error: Patient with ID " + id + " not found.");
         } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Invalid data: " + e.getMessage());
         }
     }
 
@@ -108,8 +116,7 @@ public class PatientController {
             patientService.deletePatient(id);
             return ResponseEntity.ok("Patient successfully deleted.");
         } catch (EntityNotFoundException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Patient not found.");
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Error: Patient with ID " + id + " not found.");
         }
     }
-    
 }
