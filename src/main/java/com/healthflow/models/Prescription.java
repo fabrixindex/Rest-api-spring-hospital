@@ -3,7 +3,6 @@ package com.healthflow.models;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import java.time.LocalDate;
-import java.util.Set;
 import java.util.Objects;
 
 @Entity
@@ -23,23 +22,19 @@ public class Prescription {
     @JsonIgnoreProperties("prescriptions")
     private Doctor doctor;
 
-    @ManyToMany(fetch = FetchType.LAZY, cascade = CascadeType.MERGE)
-    @JoinTable(
-        name = "prescription_medications",
-        joinColumns = @JoinColumn(name = "prescription_id"),
-        inverseJoinColumns = @JoinColumn(name = "medication_id")
-    )
-    @JsonIgnoreProperties("prescriptions") 
-    private Set<Medication> medications;
+    @ManyToOne
+    @JoinColumn(name= "medication_id", nullable = false)
+    @JsonIgnoreProperties("prescriptions")
+    private Medication medication;
 
     private LocalDate prescriptionDate;
 
     public Prescription() {}
 
-    public Prescription(Patient patient, Doctor doctor, Set<Medication> medications, LocalDate prescriptionDate) {
+    public Prescription(Patient patient, Doctor doctor, Medication medication, LocalDate prescriptionDate) {
         this.patient = patient;
         this.doctor = doctor;
-        this.medications = medications;
+        this.medication = medication;
         this.prescriptionDate = prescriptionDate;
     }
 
@@ -51,8 +46,10 @@ public class Prescription {
     public Doctor getDoctor() { return doctor; }
     public void setDoctor(Doctor doctor) { this.doctor = doctor; }
 
-    public Set<Medication> getMedications() { return medications; }
-    public void setMedications(Set<Medication> medications) { this.medications = medications; }
+    public Medication getMedication() { return medication; }
+    public void setMedication(Medication medication) { 
+        this.medication = medication; 
+    }
 
     public LocalDate getPrescriptionDate() { return prescriptionDate; }
     public void setPrescriptionDate(LocalDate prescriptionDate) { this.prescriptionDate = prescriptionDate; }
@@ -63,6 +60,7 @@ public class Prescription {
                 "id=" + id +
                 ", patient=" + (patient != null ? patient.getId() : "null") +
                 ", doctor=" + (doctor != null ? doctor.getId() : "null") +
+                ", medication=" + (medication != null ? medication.getId() : "null") +
                 ", prescriptionDate=" + prescriptionDate +
                 '}';
     }

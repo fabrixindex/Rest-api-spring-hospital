@@ -2,31 +2,31 @@ package com.healthflow.controller;
 
 import com.healthflow.dto.DoctorDTO;
 import com.healthflow.models.Doctor;
-import com.healthflow.repository.DoctorRepository;
+import com.healthflow.service.DoctorService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
+import jakarta.persistence.EntityNotFoundException;
+import jakarta.validation.Valid;
 import java.util.List;
-import java.util.Optional;
-import java.util.stream.Collectors;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/doctors")
 @Tag(name = "Doctors", description = "API for managing doctors")
 public class DoctorController {
 
-    private final DoctorRepository doctorRepository;
+    private final DoctorService doctorService;
 
-    public DoctorController(DoctorRepository doctorRepository) {
-        this.doctorRepository = doctorRepository;
+    public DoctorController(DoctorService doctorService) {
+        this.doctorService = doctorService;
     }
 
     @Operation(summary = "Get all doctors", description = "Retrieves a list of all registered doctors.")
@@ -36,10 +36,14 @@ public class DoctorController {
     })
     @GetMapping
     public ResponseEntity<List<DoctorDTO>> getAllDoctors() {
-        List<DoctorDTO> doctors = doctorRepository.findAll().stream()
+        List<DoctorDTO> doctors = doctorService.getAllDoctors()
+                .stream()
                 .map(DoctorDTO::fromEntity)
-                .collect(Collectors.toList());
-        return ResponseEntity.ok(doctors);
+                .toList();
+
+        return doctors.isEmpty()
+                ? ResponseEntity.status(HttpStatus.NO_CONTENT).build()
+                : ResponseEntity.ok(doctors);
     }
 
     @Operation(summary = "Get doctor by ID", description = "Retrieves a doctor's details by their ID.")
@@ -49,12 +53,14 @@ public class DoctorController {
         @ApiResponse(responseCode = "404", description = "Doctor not found", content = @Content(mediaType = "application/json"))
     })
     @GetMapping("/{id}")
-    public ResponseEntity<Object> getDoctorById(@PathVariable Long id) {
-        Optional<Doctor> doctor = doctorRepository.findById(id);
-        if (doctor.isPresent()) {
-            return ResponseEntity.ok(DoctorDTO.fromEntity(doctor.get()));
+    public ResponseEntity<?> getDoctorById(@PathVariable Long id) {
+        try {
+            Doctor doctor = doctorService.getDoctorById(id);
+            return ResponseEntity.ok(DoctorDTO.fromEntity(doctor));
+        } catch (ResponseStatusException ex) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("Error: Doctor with ID " + id + " not found.");
         }
-        return notFoundResponse(id);
     }
 
     @Operation(summary = "Create a new doctor", description = "Registers a new doctor with the given details.")
@@ -64,10 +70,14 @@ public class DoctorController {
         @ApiResponse(responseCode = "400", description = "Invalid request data", content = @Content)
     })
     @PostMapping
-    public ResponseEntity<DoctorDTO> createDoctor(@RequestBody DoctorDTO doctorDTO) {
-        Doctor doctor = doctorDTO.toEntity();
-        Doctor savedDoctor = doctorRepository.save(doctor);
-        return ResponseEntity.status(HttpStatus.CREATED).body(DoctorDTO.fromEntity(savedDoctor));
+    public ResponseEntity<?> createDoctor(@Valid @RequestBody DoctorDTO doctorDTO) {
+        try {
+            Doctor doctor = doctorService.saveDoctor(doctorDTO.toEntity());
+            return ResponseEntity.status(HttpStatus.CREATED).body(DoctorDTO.fromEntity(doctor));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Invalid request: " + e.getMessage());
+        }
     }
 
     @Operation(summary = "Update a doctor", description = "Updates the details of an existing doctor.")
@@ -77,37 +87,27 @@ public class DoctorController {
         @ApiResponse(responseCode = "404", description = "Doctor not found", content = @Content(mediaType = "application/json"))
     })
     @PutMapping("/{id}")
-    public ResponseEntity<Object> updateDoctor(@PathVariable Long id, @RequestBody DoctorDTO doctorDTO) {
-        Optional<Doctor> existingDoctor = doctorRepository.findById(id);
-        if (existingDoctor.isPresent()) {
-            Doctor doctor = existingDoctor.get();
-            doctor.setFirstName(doctorDTO.getFirstName());
-            doctor.setLastName(doctorDTO.getLastName());
-            doctor.setSpecialty(doctorDTO.getSpecialty());
-            doctor.setPhone(doctorDTO.getPhone());
-            doctor.setEmail(doctorDTO.getEmail());
-            Doctor updatedDoctor = doctorRepository.save(doctor);
+    public ResponseEntity<DoctorDTO> updateDoctor(@PathVariable Long id, @Valid @RequestBody DoctorDTO doctorDTO) {
+        try {
+            Doctor updatedDoctor = doctorService.updateDoctor(id, doctorDTO.toEntity());
             return ResponseEntity.ok(DoctorDTO.fromEntity(updatedDoctor));
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
-        return notFoundResponse(id);
     }
 
-    @Operation(summary = "Delete a doctor", description = "Deletes a doctor by their ID.")
+    @Operation(summary = "Delete a doctor", description = "Removes a doctor from the system by their ID.")
     @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "Doctor deleted successfully"),
-        @ApiResponse(responseCode = "404", description = "Doctor not found", content = @Content(mediaType = "application/json"))
+        @ApiResponse(responseCode = "200", description = "Doctor successfully deleted", content = @Content),
+        @ApiResponse(responseCode = "404", description = "Doctor not found", content = @Content)
     })
     @DeleteMapping("/{id}")
-    public ResponseEntity<Object> deleteDoctor(@PathVariable Long id) {
-        if (doctorRepository.existsById(id)) {
-            doctorRepository.deleteById(id);
-            return ResponseEntity.ok(Map.of("message", "Doctor deleted successfully."));
+    public ResponseEntity<String> deleteDoctor(@PathVariable Long id) {
+        try {
+            doctorService.deleteDoctor(id);
+            return ResponseEntity.ok("Doctor successfully deleted.");
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Doctor not found.");
         }
-        return notFoundResponse(id);
-    }
-
-    private ResponseEntity<Object> notFoundResponse(Long id) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(Map.of("message", "Doctor with ID " + id + " not found."));
     }
 }
